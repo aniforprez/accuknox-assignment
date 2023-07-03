@@ -1,9 +1,11 @@
+from rest_framework import mixins, generics
 from rest_framework.views import APIView, Response, status
 from rest_framework.authtoken.models import Token
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
-from .serialisers import SignupSerialiser, LoginSerialiser
-from .models import User
+from .serialisers import SignupSerialiser, LoginSerialiser, FriendRequestSerialiser
+from .models import User, FriendRequest
+from django.db.models import Q
 
 
 class SignupView(APIView):
@@ -36,3 +38,73 @@ class LogoutView(APIView):
     def post(self, request, format=None):
         request.user.auth_token.delete()
         return Response(status=status.HTTP_200_OK)
+
+
+class SentFriendRequestView(
+    mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView
+):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    serializer_class = FriendRequestSerialiser
+
+    def get_queryset(self):
+        return FriendRequest.objects.filter(from_user=self.request.user)
+
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
+
+
+class ReceivedFriendRequestView(mixins.ListModelMixin, generics.GenericAPIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    serializer_class = FriendRequestSerialiser
+
+    def get_queryset(self):
+        return FriendRequest.objects.filter(to_user=self.request.user)
+
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+
+
+class FriendRequestDetail(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk):
+        current_user = self.request.user
+        try:
+            return FriendRequest.objects.filter(
+                Q(to_user=current_user) | Q(from_user=current_user)
+            ).get(pk=pk)
+        except FriendRequest.DoesNotExist:
+            raise
+
+    def get(self, request, pk, format=None):
+        try:
+            fr = self.get_object(pk)
+        except FriendRequest.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = FriendRequestSerialiser(fr)
+        return Response(serializer.data)
+
+
+class AcceptFriendRequest(generics.GenericAPIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return FriendRequest.objects.filter(to_user=self.request.user)
+
+    def post(self, request, *args, **kwargs):
+        try:
+            fr = self.get_object()
+        except FriendRequest.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        fr.accepted = True
+        fr.save()
+        serializer = FriendRequestSerialiser(fr)
+        return Response(serializer.data)

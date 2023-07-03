@@ -1,6 +1,5 @@
 from rest_framework import serializers
-from rest_framework.authtoken.models import Token
-from .models import User
+from .models import User, FriendRequest
 from django.contrib.auth import authenticate
 
 
@@ -41,4 +40,33 @@ class LoginSerialiser(serializers.Serializer):
 class UserSerialiser(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["email"]
+        fields = ["id", "email", "first_name", "last_name"]
+
+
+class FriendRequestSerialiser(serializers.ModelSerializer):
+    from_user = UserSerialiser(read_only=True)
+    to_user = UserSerialiser(read_only=True)
+
+    class Meta:
+        model = FriendRequest
+        fields = ["id", "from_user", "to_user", "accepted"]
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        user_id = request.user.id
+
+        to_user_id = request.data.get("to_user")
+        if to_user_id == user_id:
+            raise serializers.ValidationError("Cannot send friend requests to yourself")
+
+        try:
+            to_user = User.objects.get(pk=to_user_id)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("User does not exist")
+
+        attrs["from_user"] = request.user
+        attrs["to_user"] = to_user
+        return super().validate(attrs)
+
+    def create(self, validated_data):
+        return super().create(validated_data)
