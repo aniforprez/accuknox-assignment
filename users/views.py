@@ -1,4 +1,4 @@
-from rest_framework import mixins, generics
+from rest_framework import mixins, generics, throttling
 from rest_framework.views import APIView, Response, status
 from rest_framework.authtoken.models import Token
 from rest_framework.authentication import TokenAuthentication
@@ -40,7 +40,15 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
-class SentFriendRequestView(
+class SearchUsersView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        pass
+
+
+class SentFriendRequestListView(
     mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView
 ):
     authentication_classes = [TokenAuthentication]
@@ -53,17 +61,42 @@ class SentFriendRequestView(
     def get(self, request, *args, **kwargs):
         return self.list(request, *args, **kwargs)
 
+
+class SendFriendRequestThrottle(throttling.UserRateThrottle):
+    rate = "3/m"
+
+
+class SendFriendRequestView(
+    mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView
+):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    serializer_class = FriendRequestSerialiser
+    throttle_classes = [SendFriendRequestThrottle]
+
     def post(self, request, *args, **kwargs):
         return self.create(request, *args, **kwargs)
 
 
-class ReceivedFriendRequestView(mixins.ListModelMixin, generics.GenericAPIView):
+class ReceivedFriendRequestListView(mixins.ListModelMixin, generics.GenericAPIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
     serializer_class = FriendRequestSerialiser
 
     def get_queryset(self):
         return FriendRequest.objects.filter(to_user=self.request.user)
+
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+
+
+class PendingFriendRequestView(mixins.ListModelMixin, generics.GenericAPIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    serializer_class = FriendRequestSerialiser
+
+    def get_queryset(self):
+        return FriendRequest.objects.filter(to_user=self.request.user, accepted=None)
 
     def get(self, request, *args, **kwargs):
         return self.list(request, *args, **kwargs)
@@ -105,6 +138,25 @@ class AcceptFriendRequest(generics.GenericAPIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
         fr.accepted = True
+        fr.save()
+        serializer = FriendRequestSerialiser(fr)
+        return Response(serializer.data)
+
+
+class RejectFriendRequest(generics.GenericAPIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return FriendRequest.objects.filter(to_user=self.request.user)
+
+    def post(self, request, *args, **kwargs):
+        try:
+            fr = self.get_object()
+        except FriendRequest.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        fr.accepted = False
         fr.save()
         serializer = FriendRequestSerialiser(fr)
         return Response(serializer.data)

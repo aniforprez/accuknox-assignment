@@ -64,6 +64,12 @@ class FriendRequestSerialiser(serializers.ModelSerializer):
         except User.DoesNotExist:
             raise serializers.ValidationError("User does not exist")
 
+        try:
+            FriendRequest.objects.get(to_user=to_user, from_user=request.user)
+            raise serializers.ValidationError("You have already sent a friend request")
+        except FriendRequest.DoesNotExist:
+            pass
+
         attrs["from_user"] = request.user
         attrs["to_user"] = to_user
         return super().validate(attrs)
