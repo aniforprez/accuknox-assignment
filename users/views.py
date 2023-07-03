@@ -11,6 +11,7 @@ from .serialisers import (
 )
 from .models import User, FriendRequest
 from django.db.models import Q
+from itertools import chain
 
 
 class SignupView(APIView):
@@ -62,6 +63,26 @@ class SearchUsersView(generics.ListAPIView):
             results = queryset.filter(
                 Q(first_name__contains=name_query) | Q(last_name__contains=name_query)
             )
+
+        return results
+
+
+class FriendsView(generics.ListAPIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserSerialiser
+
+    def get_queryset(self):
+        current_user = self.request.user
+        results = set()
+        for fr in FriendRequest.objects.select_related("from_user").filter(
+            to_user=current_user
+        ):
+            results.add(fr.to_user)
+        for fr in FriendRequest.objects.select_related("to_user").filter(
+            from_user=current_user
+        ):
+            results.add(fr.to_user)
 
         return results
 
