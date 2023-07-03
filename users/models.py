@@ -8,7 +8,7 @@ class User(AbstractUser):
     username = None
     email = models.EmailField(unique=True)
     first_name = models.CharField("first name", max_length=200)
-    last_name = models.CharField("first name", max_length=200)
+    last_name = models.CharField("last name", max_length=200)
     friends = models.ForeignKey("self", on_delete=models.SET_NULL, null=True)
     created = models.DateTimeField("created", auto_now_add=True)
     updated = models.DateTimeField("updated", auto_now=True)

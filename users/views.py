@@ -3,7 +3,12 @@ from rest_framework.views import APIView, Response, status
 from rest_framework.authtoken.models import Token
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
-from .serialisers import SignupSerialiser, LoginSerialiser, FriendRequestSerialiser
+from .serialisers import (
+    SignupSerialiser,
+    LoginSerialiser,
+    FriendRequestSerialiser,
+    UserSerialiser,
+)
 from .models import User, FriendRequest
 from django.db.models import Q
 
@@ -40,17 +45,28 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
-class SearchUsersView(APIView):
+class SearchUsersView(generics.ListAPIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
+    serializer_class = UserSerialiser
 
-    def get(self, request, *args, **kwargs):
-        pass
+    def get_queryset(self):
+        queryset = User.objects.all()
+        email_query = self.request.query_params.get("email")
+        name_query = self.request.query_params.get("name")
+        results = []
+
+        if email_query:
+            results = queryset.filter(email=email_query)
+        elif name_query:
+            results = queryset.filter(
+                Q(first_name__contains=name_query) | Q(last_name__contains=name_query)
+            )
+
+        return results
 
 
-class SentFriendRequestListView(
-    mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView
-):
+class SentFriendRequestListView(mixins.ListModelMixin, generics.GenericAPIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
     serializer_class = FriendRequestSerialiser
